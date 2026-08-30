@@ -15,15 +15,15 @@ dependencies = [
   "fastapi>=0.116,<1",
   "faster-whisper>=1.2,<2",
   "pydantic-settings>=2.10,<3",
+  "httpx>=0.28,<1",
   "sqlalchemy[asyncio]>=2.0,<3",
   "uvicorn[standard]>=0.35,<1",
 ]
 
 [dependency-groups]
 dev = [
-  "httpx>=0.28,<1",
   "mypy>=1.17,<2",
-  "pytest>=8.4,<9",
+  "pytest>=9.0.3,<10",
   "pytest-asyncio>=1.1,<2",
   "ruff>=0.12,<1",
 ]
@@ -45,9 +45,10 @@ plugins = ["pydantic.mypy"]
 exclude = ["migrations"]
 
 [[tool.mypy.overrides]]
-module = ["celery", "celery.*"]
+module = ["boto3", "boto3.*", "botocore", "botocore.*", "celery", "celery.*", "faster_whisper", "faster_whisper.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = ["integration: exercises local FFmpeg or infrastructure"]

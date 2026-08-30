@@ -22,13 +22,25 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/2"
 
     s3_endpoint_url: str = "http://localhost:9000"
+    s3_public_endpoint_url: str = "http://localhost:9000"
     s3_region: str = "us-east-1"
     s3_bucket: str = "avato-local"
     s3_access_key_id: str = ""
     s3_secret_access_key: str = ""
     s3_use_ssl: bool = False
+    s3_server_side_encryption: str = ""
 
     openai_api_key: str = ""
+
+    whisper_model: str = "small"
+    whisper_device: str = "cpu"
+    whisper_compute_type: str = "int8"
+
+    payment_provider: str = "local"
+    payment_callback_url: str = "http://localhost:8080/api/payments/callback"
+    payment_local_secret: str = "local-payment-secret-change-me"
+    zarinpal_merchant_id: str = ""
+    zarinpal_sandbox: bool = True
 
 
 @lru_cache

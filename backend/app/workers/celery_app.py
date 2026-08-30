@@ -13,4 +13,18 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
+    imports=("app.workers.tasks", "app.workers.render_tasks", "app.workers.retention_tasks"),
+    task_track_started=True,
+    worker_prefetch_multiplier=1,
+    task_acks_late=True,
+    beat_schedule={
+        "warn-expiring-projects-daily": {
+            "task": "avato.warn_expiring_projects",
+            "schedule": 86400.0,
+        },
+        "delete-expired-projects-daily": {
+            "task": "avato.delete_expired_projects",
+            "schedule": 86400.0,
+        },
+    },
 )

@@ -49,6 +49,24 @@ services:
       retries: 10
     restart: unless-stopped
 
+  storage-init:
+    build:
+      context: ./backend
+      target: development
+    environment:
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+      S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9100}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-avato-local}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-avato-local}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-avato-local-password}
+      S3_USE_SSL: ${S3_USE_SSL:-false}
+    command: .venv/bin/python -m scripts.seed_local_assets
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     build:
       context: ./backend
@@ -63,12 +81,21 @@ services:
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/2}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+      S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9100}
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_BUCKET: ${S3_BUCKET:-avato-local}
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-avato-local}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-avato-local-password}
       S3_USE_SSL: ${S3_USE_SSL:-false}
+      S3_SERVER_SIDE_ENCRYPTION: ${S3_SERVER_SIDE_ENCRYPTION:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-local}
+      PAYMENT_CALLBACK_URL: ${PAYMENT_CALLBACK_URL:-http://localhost:8080/api/payments/callback}
+      PAYMENT_LOCAL_SECRET: ${PAYMENT_LOCAL_SECRET:-local-payment-secret-change-me}
+      ZARINPAL_MERCHANT_ID: ${ZARINPAL_MERCHANT_ID:-}
+      ZARINPAL_SANDBOX: ${ZARINPAL_SANDBOX:-true}
+      HF_HOME: /models/huggingface
+      HF_TOKEN: ${HF_TOKEN:-}
     command: .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "${BACKEND_PORT_FORWARD:-8100}:8000"
@@ -79,14 +106,29 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8000/api/health"]
       interval: 5s
       timeout: 5s
       retries: 15
     restart: unless-stopped
+
+  migrate:
+    build:
+      context: ./backend
+      target: development
+    environment: *backend-environment
+    command: .venv/bin/alembic upgrade head
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   worker:
     build:
@@ -96,9 +138,43 @@ services:
     command: .venv/bin/celery -A app.workers.celery_app worker --loglevel=INFO --concurrency=2
     volumes:
       - ./backend/app:/app/app:ro
+      - whisper_models:/models
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
+      model-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  model-init:
+    build:
+      context: ./backend
+      target: development
+    user: root
+    command: chown -R 10001:10001 /models
+    volumes:
+      - whisper_models:/models
+    restart: "no"
+
+  beat:
+    build:
+      context: ./backend
+      target: development
+    environment: *backend-environment
+    command: .venv/bin/celery -A app.workers.celery_app beat --loglevel=INFO --schedule=/tmp/celerybeat-schedule
+    volumes:
+      - ./backend/app:/app/app:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     restart: unless-stopped
@@ -138,3 +214,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  whisper_models:
