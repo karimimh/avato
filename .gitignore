@@ -1,0 +1,28 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# JavaScript
+web/node_modules/
+web/.next/
+web/out/
+web/coverage/
+web/*.tsbuildinfo
+
+# Python
+backend/.venv/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.coverage
+backend/htmlcov/
+backend/__pycache__/
+backend/**/*.py[cod]
+backend/*.egg-info/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+

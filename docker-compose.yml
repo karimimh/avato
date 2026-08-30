@@ -1,0 +1,140 @@
+name: avato
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-avato}
+      POSTGRES_USER: ${POSTGRES_USER:-avato}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-avato-dev-password}
+    ports:
+      - "${POSTGRES_PORT_FORWARD:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "${REDIS_PORT_FORWARD:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-avato-local}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-avato-local-password}
+    ports:
+      - "${MINIO_API_PORT_FORWARD:-9100}:9000"
+      - "${MINIO_CONSOLE_PORT_FORWARD:-9101}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      target: development
+    environment: &backend-environment
+      APP_ENV: ${APP_ENV:-development}
+      APP_NAME: ${APP_NAME:-Avato}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://avato:avato-dev-password@postgres:5432/avato}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/2}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-avato-local}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-avato-local}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-avato-local-password}
+      S3_USE_SSL: ${S3_USE_SSL:-false}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    command: .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "${BACKEND_PORT_FORWARD:-8100}:8000"
+    volumes:
+      - ./backend/app:/app/app:ro
+      - ./backend/migrations:/app/migrations:ro
+      - ./backend/alembic.ini:/app/alembic.ini:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      target: development
+    environment: *backend-environment
+    command: .venv/bin/celery -A app.workers.celery_app worker --loglevel=INFO --concurrency=2
+    volumes:
+      - ./backend/app:/app/app:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      target: development
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080/api}
+      WATCHPACK_POLLING: "true"
+    command: npm run dev
+    ports:
+      - "${FRONTEND_PORT_FORWARD:-3000}:3000"
+    volumes:
+      - ./web/src:/app/src:ro
+      - ./web/public:/app/public:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.29-alpine
+    ports:
+      - "${NGINX_PORT_FORWARD:-8080}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      web:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
