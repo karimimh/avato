@@ -22,6 +22,6 @@ DejaVu Sans inside the backend image for rendered media.
 
 The final transcription smoke used one temporary sample from the CC0-1.0
 `hezarai/common-voice-13-fa` repackaging of Mozilla Common Voice. It was fetched
-only into `/private/tmp`, repeated to meet the five-second input minimum, and was
+only into a temporary directory, repeated to meet the five-second input minimum, and was
 not committed or redistributed with Avato. Its temporary QA account and stored
 objects were deleted after verification.
