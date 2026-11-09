@@ -236,3 +236,7 @@ and has no public deployment or real users yet. The
 [docs/implementation-status.md](docs/implementation-status.md) maps each
 requirement and acceptance criterion to its implementation and tests, and lists
 the configuration a production launch would still need.
+
+## License
+
+Released under the [GNU Affero General Public License v3.0](LICENSE). If you run a modified version as a network service, you must make its source code available to its users.
